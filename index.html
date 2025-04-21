@@ -4,24 +4,32 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Chromatris - Modern Tetris Clone</title>
-  <meta name="description" content="A modern, responsive Tetris clone built with HTML, CSS, and JavaScript. Features touch controls, high scores, and smooth gameplay.">
-  <meta name="keywords" content="tetris, puzzle game, javascript game, html5 game, chromatris">
+  <meta name="description" content="A modern, responsive Tetris clone built with HTML, CSS, and JavaScript. Features touch controls, high scores, and smooth gameplay on GitHub Pages.">
+  <meta name="keywords" content="tetris, puzzle game, javascript game, html5 game, chromatris, github pages">
   <meta name="theme-color" content="#111111">
 
   <link rel="icon" href="assets/logo.png" type="image/png">
   <link rel="apple-touch-icon" href="assets/logo-192.png"> <link rel="manifest" href="manifest.json">
 
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://your-game-url.com/"> <meta property="og:title" content="Chromatris - Modern Tetris Clone">
-  <meta property="og:description" content="A fun and colorful Tetris clone.">
-  <meta property="og:image" content="https://your-game-url.com/assets/background.jpg"> <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:url" content="https://your-game-url.com/"> <meta property="twitter:title" content="Chromatris - Modern Tetris Clone">
-  <meta property="twitter:description" content="A fun and colorful Tetris clone.">
-  <meta property="twitter:image" content="https://your-game-url.com/assets/background.jpg"> <link rel="stylesheet" href="styles.css">
+  <meta property="og:url" content="https://sublations.github.io/chromatris/">
+  <meta property="og:title" content="Chromatris - Modern Tetris Clone">
+  <meta property="og:description" content="A fun and colorful Tetris clone, playable in your browser.">
+  <meta property="og:image" content="https://sublations.github.io/chromatris/assets/background.jpg">
+
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://sublations.github.io/chromatris/">
+  <meta property="twitter:title" content="Chromatris - Modern Tetris Clone">
+  <meta property="twitter:description" content="A fun and colorful Tetris clone, playable in your browser.">
+  <meta property="twitter:image" content="https://sublations.github.io/chromatris/assets/background.jpg">
+
+  <link rel="stylesheet" href="styles.css">
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js" integrity="sha512-xi/RZRIF/S0hJ+yJJYuZ5yk6/8pCiRlEXZzoguSMl+vk2i3m6UjUO/WcZ11blRL/O+rnj94JAU/Qzhh96rg0gw==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
-  <script src="game.js" type="module" defer></script> </head>
+
+  <script src="game.js" type="module" defer></script>
+</head>
 <body>
   <header id="header">
     <div class="left">
@@ -59,15 +67,16 @@
 
     <div class="overlay" id="menu-screen" role="dialog" aria-modal="true" aria-labelledby="menu-title">
       <h1 id="menu-title">Chromatris</h1>
-      <button id="btn-start">Start Game</button>
+      <button id="btn-start" disabled>Start Game</button>
+      <p id="loading-indicator"><small>Loading assets...</small></p>
     </div>
-    <div class="overlay hidden" id="pause-screen" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+    <div class="overlay" id="pause-screen" role="dialog" aria-modal="true" aria-labelledby="pause-title">
       <h1 id="pause-title">Paused</h1>
       <button id="btn-resume">Resume</button>
       <button id="btn-restart-pause">Restart</button>
       <p><small>(Press ESC to Resume)</small></p>
     </div>
-    <div class="overlay hidden" id="gameover-screen" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+    <div class="overlay" id="gameover-screen" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
       <h1 id="gameover-title">Game Over</h1>
       <p>Your Score: <span id="final-score">0</span></p>
       <button id="btn-play-again">Play Again</button>

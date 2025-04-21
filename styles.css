@@ -177,12 +177,14 @@ canvas {
 .line-clear-flash {
   position: absolute;
   background-color: var(--clear-flash-color);
-  width: 100%;
+  width: 100%; /* Set by JS to canvas width */
   height: var(--block-size-dynamic); /* Will be set by JS */
   left: 0;
   z-index: 1; /* Above blocks */
   animation: flash 0.3s ease-out forwards;
   pointer-events: none; /* Don't interfere with input */
+  /* Ensure it's positioned relative to the game area */
+  transform: translateX(var(--canvas-offset-x, 0)); /* Align with canvas if needed */
 }
 
 @keyframes flash {
@@ -254,7 +256,6 @@ canvas {
   opacity: 1;
   visibility: visible;
 }
-/* Overlays - no longer using .hidden class, rely on GSAP autoAlpha */
 
 .overlay h1 {
   font-size: clamp(2rem, 8vw, 3.5rem); /* Responsive font size */
@@ -265,7 +266,7 @@ canvas {
 .overlay p {
   font-size: 1.2rem;
 }
-.overlay span {
+.overlay span { /* e.g., final score */
   font-weight: bold;
   color: var(--accent);
 }
@@ -280,10 +281,14 @@ canvas {
   min-width: 150px;
   transition: background-color 0.2s ease, transform 0.1s ease;
 }
-.overlay button:hover {
+.overlay button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+.overlay button:hover:not(:disabled) {
   background: var(--btn-hover);
 }
-.overlay button:active {
+.overlay button:active:not(:disabled) {
   background: var(--btn-active);
   transform: scale(0.98);
 }
@@ -329,13 +334,14 @@ canvas {
   #game-canvas {
      width: 90vw; /* Example: take 90% of viewport width */
      height: calc(90vw * 2); /* Maintain 1:2 aspect ratio */
-     max-height: 75vh; /* Don't let it get too tall */
-     max-width: calc(75vh / 2); /* Maintain aspect ratio if height is constrained */
+     max-height: 70vh; /* Adjusted max height */
+     max-width: calc(70vh / 2); /* Maintain aspect ratio if height is constrained */
   }
 
    /* Ensure touch controls don't make page scroll */
   body {
-    padding-bottom: 80px; /* Add padding to prevent overlap with controls */
+    /* Add padding to prevent overlap IF touch controls are fixed/absolute at bottom */
+    /* padding-bottom: 80px; */ /* Not needed if controls are relative */
   }
 }
 
@@ -384,6 +390,9 @@ canvas {
     animation: none;
     opacity: 0; /* Just hide it */
   }
-  /* Disable GSAP animations if needed */
-  /* gsap.globalTimeline.timeScale(0); */ /* Can be set in JS */
+  /* You could also potentially disable GSAP animations here */
+  /* For example, in JS:
+     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+     if (prefersReducedMotion) { gsap.globalTimeline.timeScale(0); }
+  */
 }

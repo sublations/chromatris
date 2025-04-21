@@ -1,7 +1,17 @@
 // Ensure libraries are loaded (simple check)
 if (typeof Howl === 'undefined' || typeof gsap === 'undefined') {
   console.error("Required libraries (Howler, GSAP) not loaded!");
-  alert("Error: Could not load game resources. Please refresh the page.");
+  // Attempt to inform user non-intrusively
+  const menuScreen = document.getElementById('menu-screen');
+  if (menuScreen) {
+       menuScreen.innerHTML = '<h1>Error</h1><p>Could not load game resources. Please check your connection and refresh.</p>';
+       menuScreen.classList.add('visible');
+       gsap.set(menuScreen, { autoAlpha: 1 });
+  } else {
+      alert("Error: Could not load game resources. Please refresh the page.");
+  }
+  // Prevent further execution if libraries are missing
+  throw new Error("Missing required libraries.");
 }
 
 class Game {
@@ -11,16 +21,14 @@ class Game {
       this.NY = 20; // Board height
       this.NU = 5;  // Upcoming preview size (in blocks)
       this.SPEED_START = 0.6; // Initial time per step (seconds)
-      this.SPEED_DEC = 0.005; // Speed decrement per row cleared (smaller for smoother progression)
+      this.SPEED_DEC = 0.005; // Speed decrement per row cleared
       this.SPEED_MIN = 0.08; // Minimum time per step
-      this.KEY = { ESC: 'Escape', SPACE: 'Space', LEFT: 'ArrowLeft', UP: 'ArrowUp', RIGHT: 'ArrowRight', DOWN: 'ArrowDown' };
+      this.KEY = { ESC: 'Escape', SPACE: ' ', LEFT: 'ArrowLeft', UP: 'ArrowUp', RIGHT: 'ArrowRight', DOWN: 'ArrowDown' }; // Use ' ' for Spacebar event.key
       this.STORAGE_KEY = 'chromatris-highscore';
       this.GHOST_ALPHA = 0.3;
 
       this.TETROMINOS = {
           // Bitmasks define the 4x4 grid for each piece orientation
-          // 0x0F00 = 0000 1111 0000 0000 (line on 2nd row)
-          // 0x2222 = 0010 0010 0010 0010 (vertical line in 2nd column)
           i: { size: 4, blocks: [0x0F00, 0x2222, 0x00F0, 0x4444], color: 'cyan', spriteKey: 'i' },
           j: { size: 3, blocks: [0x44C0, 0x8E00, 0x6440, 0x0E20], color: 'blue', spriteKey: 'j' },
           l: { size: 3, blocks: [0x4460, 0x0E80, 0xC440, 0x2E00], color: 'orange', spriteKey: 'l' },
@@ -33,59 +41,35 @@ class Game {
       this.STATE = { MENU: 0, PLAY: 1, PAUSE: 2, OVER: 3 };
 
       // DOM elements
-      this.canvas = document.getElementById('game-canvas');
-      this.ctx = this.canvas.getContext('2d');
-      this.upCanvas = document.getElementById('upcoming-canvas');
-      this.uctx = this.upCanvas.getContext('2d');
-      this.scoreEl = document.getElementById('score');
-      this.rowsEl = document.getElementById('rows');
-      this.highEl = document.getElementById('highscore');
-      this.finalScoreEl = document.getElementById('final-score');
-      this.srAnnouncer = document.getElementById('sr-announcer'); // For screen readers
-
-      // Overlays
-      this.menuScreen = document.getElementById('menu-screen');
-      this.pauseScreen = document.getElementById('pause-screen');
-      this.overScreen = document.getElementById('gameover-screen');
-      this.overlays = [this.menuScreen, this.pauseScreen, this.overScreen];
-
-      // Buttons / Controls
-      this.btnStart = document.getElementById('btn-start');
-      this.btnResume = document.getElementById('btn-resume');
-      this.btnRestartPause = document.getElementById('btn-restart-pause');
-      this.btnPlayAgain = document.getElementById('btn-play-again');
-      this.btnMenu = document.getElementById('btn-menu');
-      this.btnMute = document.getElementById('btn-mute');
-      this.btnFS = document.getElementById('btn-fullscreen');
-      this.touchControls = document.getElementById('touch-controls');
+      this.cacheDomElements();
 
       // Game state variables
       this.blocks = null; // Game board grid
       this.currentPiece = null;
       this.nextPiece = null;
-      this.ghostPieceY = 0; // Y position for the ghost piece
+      this.pieceBag = []; // For 7-bag randomizer
+      this.ghostPieceY = 0;
       this.score = 0;
       this.rows = 0;
-      this.step = this.SPEED_START; // Current time per game step
-      this.dt = 0; // Accumulated time since last step
+      this.step = this.SPEED_START;
+      this.dt = 0;
       this.state = this.STATE.MENU;
-      this.actions = []; // Queue for player actions
+      this.actions = [];
       this.lastTime = 0;
       this.animationFrameId = null;
       this.isMuted = false;
-      this.blockSize = 30; // Default size, will be updated on resize
+      this.blockSize = 30; // Default size, updated on resize
 
       // Assets
       this.sprites = {};
       this.sounds = {};
       this.assetsLoaded = false;
-      this.assetPromises = [];
+      this.assetLoadPromise = null; // Store the promise
 
       // High Score
-      this.highscore = parseInt(localStorage.getItem(this.STORAGE_KEY)) || 0;
-      this.updateHighscoreDisplay();
+      this.highscore = 0; // Loaded after DOM ready
 
-      // Debounce utility
+      // Debounce utility for resize
       this.debounce = (fn, ms = 100) => {
           let t;
           return (...args) => {
@@ -93,61 +77,112 @@ class Game {
               t = setTimeout(() => fn.apply(this, args), ms);
           };
       };
-
       this.onResizeDebounced = this.debounce(this.onResize, 150);
 
-      this.loadAssets();
+      // Initialize after DOM is potentially ready
+      this.init();
+  }
+
+  cacheDomElements() {
+       this.canvas = document.getElementById('game-canvas');
+       this.ctx = this.canvas.getContext('2d');
+       this.upCanvas = document.getElementById('upcoming-canvas');
+       this.uctx = this.upCanvas.getContext('2d');
+       this.scoreEl = document.getElementById('score');
+       this.rowsEl = document.getElementById('rows');
+       this.highEl = document.getElementById('highscore');
+       this.finalScoreEl = document.getElementById('final-score');
+       this.srAnnouncer = document.getElementById('sr-announcer');
+       this.loadingIndicator = document.getElementById('loading-indicator');
+
+       // Overlays
+       this.menuScreen = document.getElementById('menu-screen');
+       this.pauseScreen = document.getElementById('pause-screen');
+       this.overScreen = document.getElementById('gameover-screen');
+       this.overlays = [this.menuScreen, this.pauseScreen, this.overScreen];
+
+       // Buttons / Controls
+       this.btnStart = document.getElementById('btn-start');
+       this.btnResume = document.getElementById('btn-resume');
+       this.btnRestartPause = document.getElementById('btn-restart-pause');
+       this.btnPlayAgain = document.getElementById('btn-play-again');
+       this.btnMenu = document.getElementById('btn-menu');
+       this.btnMute = document.getElementById('btn-mute');
+       this.btnFS = document.getElementById('btn-fullscreen');
+       this.touchControls = document.getElementById('touch-controls');
+  }
+
+  init() {
+      // Load high score safely
+      try {
+           this.highscore = parseInt(localStorage.getItem(this.STORAGE_KEY)) || 0;
+      } catch (e) {
+           console.warn("Could not read highscore from localStorage:", e);
+           this.highscore = 0;
+      }
+      this.updateHighscoreDisplay();
+
+      this.assetLoadPromise = this.loadAssets(); // Start loading assets
       this.bindEvents();
-      this.initBoard(); // Initialize board structure even before assets load
-      this.showOverlay(this.menuScreen, false); // Show menu initially without animation
+      this.initBoard(); // Initialize board structure
+      this.showOverlay(this.menuScreen, false); // Show menu immediately
       this.onResize(); // Initial sizing
   }
 
   // --- Asset Loading ---
-
   loadAssets() {
-      // Sprites
-      Object.keys(this.TETROMINOS).forEach(key => {
-          const spriteKey = this.TETROMINOS[key].spriteKey;
-          const img = new Image();
-          const loadPromise = new Promise((resolve, reject) => {
-              img.onload = resolve;
-              img.onerror = reject;
+      const spritePromises = Object.keys(this.TETROMINOS).map(key => {
+          return new Promise((resolve, reject) => {
+              const spriteKey = this.TETROMINOS[key].spriteKey;
+              const img = new Image();
+              img.onload = () => {
+                  this.sprites[spriteKey] = img;
+                  resolve();
+              };
+              img.onerror = (err) => {
+                  console.error(`Failed to load sprite: assets/${spriteKey}.png`);
+                  reject(err);
+              };
               img.src = `assets/${spriteKey}.png`;
           });
-          this.sprites[spriteKey] = img;
-          this.assetPromises.push(loadPromise);
       });
 
-      // Sounds
-      this.sounds = {
-          move:     new Howl({ src: ['assets/move.wav'], volume: 0.8 }),
-          rotate:   new Howl({ src: ['assets/rotate.wav'], volume: 0.8 }),
-          drop:     new Howl({ src: ['assets/drop.wav'], volume: 0.8 }),
-          hardDrop: new Howl({ src: ['assets/drop.wav'], volume: 1.0 }), // Can use a different sound
-          clear:    new Howl({ src: ['assets/clear.wav'], volume: 1.0 }),
-          gameover: new Howl({ src: ['assets/gameover.wav'], volume: 1.0 }),
-          // bgm: new Howl({ src: ['assets/music.mp3'], loop: true, volume: 0.3 }) // Example BGM
-      };
-      // Howler loads asynchronously, check Howler.state() if precise load tracking needed
+      // Simplified sound loading assumption (Howler handles internal loading state)
+      try {
+           this.sounds = {
+               move:     new Howl({ src: ['assets/move.wav'], volume: 0.8 }),
+               rotate:   new Howl({ src: ['assets/rotate.wav'], volume: 0.8 }),
+               drop:     new Howl({ src: ['assets/drop.wav'], volume: 0.8 }),
+               hardDrop: new Howl({ src: ['assets/drop.wav'], volume: 1.0 }), // Reusing drop sound
+               clear:    new Howl({ src: ['assets/clear.wav'], volume: 1.0 }),
+               gameover: new Howl({ src: ['assets/gameover.wav'], volume: 1.0 }),
+           };
+      } catch (e) {
+          console.error("Failed to initialize Howler sounds:", e);
+           // Optionally, disable sound features if Howler fails
+      }
 
-      Promise.all(this.assetPromises)
+
+      return Promise.all(spritePromises)
           .then(() => {
               this.assetsLoaded = true;
               console.log("Assets loaded successfully.");
-              // Consider enabling start button only after assets load
-              this.btnStart.disabled = false;
-              this.draw(); // Draw initial state once assets ready
+              if (this.btnStart) this.btnStart.disabled = false;
+              if (this.loadingIndicator) this.loadingIndicator.style.display = 'none'; // Hide loading text
+              this.draw(); // Draw initial board state (like grid) if needed
           })
           .catch(error => {
               console.error("Error loading assets:", error);
-              alert("Failed to load game graphics. Please check the console and refresh.");
-              // Handle asset loading failure (e.g., show error message)
+               if (this.loadingIndicator) {
+                  this.loadingIndicator.textContent = 'Error loading assets. Please refresh.';
+                  this.loadingIndicator.style.color = 'red';
+               }
+              // Don't enable start button if assets failed
+               if (this.btnStart) this.btnStart.disabled = true;
           });
   }
 
   // --- Initialization & State ---
-
   initBoard() {
       this.blocks = Array.from({ length: this.NX }, () => Array(this.NY).fill(null));
   }
@@ -164,19 +199,31 @@ class Game {
       this.calculateGhostPiece();
       this.updateStats();
       this.updateNextPieceDisplay();
-      // this.sounds.bgm?.play(); // Start BGM if exists
   }
 
   // --- Game Loop ---
-
-  startGame() {
+  async startGame() {
+      // Ensure assets are loaded before starting
       if (!this.assetsLoaded) {
-          console.warn("Assets not loaded yet, cannot start game.");
-          return;
+          console.log("Waiting for assets to load...");
+          try {
+               await this.assetLoadPromise; // Wait for the loading promise to resolve
+               console.log("Assets finished loading, starting game.");
+          } catch (error) {
+               console.error("Cannot start game due to asset load failure.");
+               alert("Failed to load game assets. Please refresh the page.");
+               return; // Don't start if assets failed
+          }
       }
-      // Resume audio context if needed (important for browsers restricting audio)
+
+      // Resume audio context if needed
       if (Howler.ctx && Howler.ctx.state === 'suspended') {
-          Howler.ctx.resume().then(() => console.log("AudioContext resumed."));
+          try {
+              await Howler.ctx.resume();
+              console.log("AudioContext resumed.");
+          } catch (e) {
+               console.error("Failed to resume AudioContext:", e);
+          }
       }
 
       this.hideAllOverlays();
@@ -184,12 +231,15 @@ class Game {
       this.state = this.STATE.PLAY;
       this.lastTime = performance.now();
       this.announce("Game started");
-      this.loop();
+      if (!this.animationFrameId) { // Prevent multiple loops
+          this.loop();
+      }
   }
 
   loop(timestamp = performance.now()) {
+      // Ensure loop stops if state changes mid-frame
       if (this.state !== this.STATE.PLAY) {
-          this.animationFrameId = null; // Stop loop if not playing
+          this.animationFrameId = null;
           return;
       }
 
@@ -200,12 +250,13 @@ class Game {
       this.handleActions();
 
       // Game logic update based on step time
-      if (this.dt > this.step) {
-          this.dt -= this.step;
-          this.dropPiece(false); // Natural drop
+      if (this.dt >= this.step) {
+          this.dt -= this.step; // Use remainder for next frame if needed
+          this.dropPiece(); // Natural drop
       }
 
       this.draw(); // Redraw canvas
+      // Request next frame
       this.animationFrameId = requestAnimationFrame(this.loop.bind(this));
   }
 
@@ -214,64 +265,68 @@ class Game {
           cancelAnimationFrame(this.animationFrameId);
           this.animationFrameId = null;
       }
-      // this.sounds.bgm?.pause(); // Pause BGM
   }
 
   // --- Player Actions & Input Handling ---
-
   queueAction(action) {
       if (this.state === this.STATE.PLAY) {
           this.actions.push(action);
-          // Optional: Limit queue size to prevent input lag buildup
-          // if (this.actions.length > 3) this.actions.shift();
       }
   }
 
   handleActions() {
-      const action = this.actions.shift(); // Process one action per frame (or more if needed)
-      if (!action) return;
+      // Process all queued actions within a frame to feel responsive
+      while (this.actions.length > 0) {
+          const action = this.actions.shift();
+          if (!action) continue;
 
-      switch (action) {
-          case 'left':
-              if (this.move(-1, 0)) this.playSound('move');
-              break;
-          case 'right':
-              if (this.move(1, 0)) this.playSound('move');
-              break;
-          case 'down':
-              this.dropPiece(false); // Soft drop
-              this.playSound('drop');
-              this.dt = 0; // Reset drop timer after manual down
-              break;
-          case 'rotate':
-              if (this.rotate()) this.playSound('rotate');
-              break;
-          case 'drop':
-              this.hardDrop(); // Hard drop
-              break;
-      }
-      // Recalculate ghost after any move/rotate
-      if (['left', 'right', 'rotate'].includes(action)) {
-          this.calculateGhostPiece();
+          let moved = false;
+          let rotated = false;
+          switch (action) {
+              case 'left':
+                  moved = this.move(-1, 0);
+                  if (moved) this.playSound('move');
+                  break;
+              case 'right':
+                  moved = this.move(1, 0);
+                  if (moved) this.playSound('move');
+                  break;
+              case 'down':
+                  this.dropPiece(true); // Soft drop initiated by user
+                  this.playSound('drop');
+                  this.dt = 0; // Reset auto-drop timer after manual down
+                  break;
+              case 'rotate':
+                  rotated = this.rotate();
+                  if (rotated) this.playSound('rotate');
+                  break;
+              case 'drop':
+                  this.hardDrop(); // Hard drop action
+                  // Hard drop handles its own sound and state update
+                  break;
+          }
+           // Recalculate ghost after any move/rotate that changes position/orientation
+           if (moved || rotated) {
+              this.calculateGhostPiece();
+           }
       }
   }
 
-  // --- Piece Movement & Logic ---
 
+  // --- Piece Movement & Logic ---
   eachBlock(piece, callback) {
-      if (!piece || !piece.type) return; // Guard against null piece
+      if (!piece || !piece.type || !this.TETROMINOS[piece.type]) return;
       const tetromino = this.TETROMINOS[piece.type];
-      let bit = 0x8000; // Start with the top-left bit of a 4x4 grid (1000 0000 0000 0000)
+      let bit = 0x8000; // Start with the top-left bit of a 4x4 grid
       let row = 0;
       let col = 0;
       const blocks = tetromino.blocks[piece.dir];
-      const size = tetromino.size; // Use size for loop limit? (bitmask handles 4x4 anyway)
 
-      for (let i = 0; i < 16; i++) { // Iterate through all 16 bits of the mask
+      for (let i = 0; i < 16; i++) { // Iterate through all 16 bits
           if (blocks & bit) {
               callback(piece.x + col, piece.y + row);
           }
-          bit >>= 1; // Move to the next bit
+          bit >>= 1;
           col++;
           if (col === 4) {
               col = 0;
@@ -281,13 +336,15 @@ class Game {
   }
 
   isOccupied(x, y) {
-      // Check bounds and if the cell in the grid is filled
-      return x < 0 || x >= this.NX || y >= this.NY || (y >= 0 && this.blocks[x][y]);
+      return x < 0 || x >= this.NX || y >= this.NY || (y >= 0 && this.blocks[x] && this.blocks[x][y]);
   }
+
 
   canPlace(piece) {
       let can = true;
       this.eachBlock(piece, (x, y) => {
+          // Important: Check if piece is outside top boundary (y < 0) ONLY if it's occupied there (relevant for rotation checks at spawn)
+           // But mostly, we care about collision with existing blocks or boundaries below y=0.
           if (this.isOccupied(x, y)) {
               can = false;
           }
@@ -296,44 +353,53 @@ class Game {
   }
 
   move(dx, dy) {
+      if (!this.currentPiece) return false;
       const nextPos = { ...this.currentPiece, x: this.currentPiece.x + dx, y: this.currentPiece.y + dy };
       if (this.canPlace(nextPos)) {
           this.currentPiece = nextPos;
-          return true; // Move successful
+          // Ghost piece needs recalculation after successful move
+          // this.calculateGhostPiece(); // Moved calculation to handleActions for efficiency
+          return true;
       }
-      return false; // Move failed
+      return false;
   }
 
   rotate() {
+      if (!this.currentPiece) return false;
       const nextDir = (this.currentPiece.dir + 1) % 4;
-      const nextRot = { ...this.currentPiece, dir: nextDir };
+      const testPiece = { ...this.currentPiece, dir: nextDir };
 
-      // Basic Wall Kick logic (can be expanded for SRS)
-      let kickX = 0;
-      let kickY = 0;
+      // Wall Kick Attempts (simplified - full SRS is more complex)
+      const kicks = [
+           [0, 0],   // Try 0,0 first
+           [-1, 0],  // Try left 1
+           [1, 0],   // Try right 1
+           [0, -1],  // Try up 1 (less common, but possible)
+           [-2, 0],  // Try left 2 (for I piece mainly)
+           [2, 0]    // Try right 2 (for I piece mainly)
+           // Full SRS has different tables based on piece and rotation state
+      ];
 
-      if (!this.canPlace(nextRot)) {
-           // Try kicking left/right
-          if (this.canPlace({ ...nextRot, x: nextRot.x - 1 })) {
-              kickX = -1;
-          } else if (this.canPlace({ ...nextRot, x: nextRot.x + 1 })) {
-              kickX = 1;
-          // Add more complex kicks if needed (especially for I piece)
-          } else {
-               return false; // Rotation failed even with basic kicks
-          }
+      for (const [dx, dy] of kicks) {
+           const kickedPiece = { ...testPiece, x: testPiece.x + dx, y: testPiece.y + dy };
+           if (this.canPlace(kickedPiece)) {
+                this.currentPiece = kickedPiece; // Apply rotation and kick
+                // Ghost piece needs recalculation after successful rotation
+                // this.calculateGhostPiece(); // Moved calculation to handleActions
+                return true; // Rotation successful
+           }
       }
 
-      this.currentPiece.dir = nextDir;
-      this.currentPiece.x += kickX;
-      this.currentPiece.y += kickY;
-      return true; // Rotation successful
+      return false; // Rotation failed after all kick attempts
   }
 
-  dropPiece(isHardDrop) {
+  dropPiece(isSoftDrop = false) {
+      if (!this.currentPiece) return;
       const nextPos = { ...this.currentPiece, y: this.currentPiece.y + 1 };
       if (this.canPlace(nextPos)) {
           this.currentPiece.y++;
+          // If it was a user-initiated soft drop, maybe add minimal score? (optional)
+          // if (isSoftDrop) this.score += 1;
       } else {
           // Piece cannot move down further, lock it in place
           this.lockPiece();
@@ -341,186 +407,218 @@ class Game {
   }
 
   hardDrop() {
-      // Move piece down until it locks
+      if (!this.currentPiece) return;
+      let distance = 0;
+      // Calculate how far down it can go
       while (this.canPlace({ ...this.currentPiece, y: this.currentPiece.y + 1 })) {
           this.currentPiece.y++;
+          distance++;
       }
+      // Optional: Score points for hard drop distance
+      // this.score += distance * 2;
+
       this.playSound('hardDrop');
-      this.lockPiece();
-      this.dt = this.step; // Force next piece immediately after hard drop
+      this.lockPiece(); // Lock the piece in its final position
+      // Reset drop timer to force next piece immediately
+      this.dt = this.step;
   }
 
   lockPiece() {
+      if (!this.currentPiece) return;
+      let gameOverCondition = false;
       this.eachBlock(this.currentPiece, (x, y) => {
-          // Ensure piece locks within bounds (can happen at top on game over)
-          if (y >= 0 && y < this.NY && x >=0 && x < this.NX) {
-               this.blocks[x][y] = this.currentPiece.type;
+          if (y < 0) {
+               // Piece locked entirely or partially above the visible board - GAME OVER
+               gameOverCondition = true;
+          } else if (y < this.NY && x >= 0 && x < this.NX) {
+              this.blocks[x][y] = this.currentPiece.type;
           }
       });
 
-      const linesCleared = this.clearLines();
+      if (gameOverCondition) {
+           this.gameOver();
+           return; // Stop further processing if game is over
+      }
+
+      const linesCleared = this.clearLines(); // Clear lines and get count
 
       // Get next piece
       this.currentPiece = this.nextPiece;
       this.nextPiece = this.randomPiece();
-      this.calculateGhostPiece(); // Calculate ghost for the new piece
-      this.updateNextPieceDisplay();
+      this.updateNextPieceDisplay(); // Update preview
 
-      // Check for game over
+      // Check if the new piece spawns in an occupied space -> GAME OVER
       if (!this.canPlace(this.currentPiece)) {
-          this.gameOver();
-      } else if (linesCleared === 0) {
-           // Slight variation in sound if no lines cleared on lock
-           this.playSound('drop');
+           // Draw the newly spawned piece partially for visual feedback before game over screen
+           this.draw();
+           this.gameOver();
+      } else {
+          // Calculate ghost for the new piece only if game continues
+          this.calculateGhostPiece();
+          // Play lock sound only if game isn't over and no lines were cleared
+           if (linesCleared === 0 && this.state !== this.STATE.OVER) {
+              this.playSound('drop'); // Use drop sound for normal lock
+           }
       }
   }
 
-  clearLines() {
-      let clearedCount = 0;
-      let linesToClear = [];
 
+  clearLines() {
+      let linesToClearIndices = [];
       for (let y = this.NY - 1; y >= 0; y--) {
           let isLineFull = true;
           for (let x = 0; x < this.NX; x++) {
-              if (!this.blocks[x][y]) {
+              if (!this.blocks[x] || !this.blocks[x][y]) { // Check column exists and block exists
                   isLineFull = false;
                   break;
               }
           }
-
           if (isLineFull) {
-              clearedCount++;
-              linesToClear.push(y);
-              this.flashLine(y); // Trigger visual flash
+              linesToClearIndices.push(y);
           }
       }
 
-      if (clearedCount > 0) {
-          this.playSound('clear');
+      const clearedCount = linesToClearIndices.length;
 
-          // Remove cleared lines and shift down
-          for (let y = this.NY - 1; y >= 0; y--) {
-              if (linesToClear.includes(y)) {
-                  // Shift all rows above this down
-                  for (let yy = y; yy > 0; yy--) {
-                      for (let x = 0; x < this.NX; x++) {
-                          this.blocks[x][yy] = this.blocks[x][yy - 1];
-                      }
-                  }
-                  // Clear the top row
-                  for (let x = 0; x < this.NX; x++) {
-                      this.blocks[x][0] = null;
-                  }
-                  // Since we shifted down, re-check the current row index
-                  // Find the next line index to check (adjusting for shifted rows)
-                  linesToClear = linesToClear.map(ly => ly < y ? ly : ly + 1);
-                  y++; // Re-check this index after shifting
-              }
-          }
+      if (clearedCount > 0) {
+           this.playSound('clear');
+
+           // Flash effect for each cleared line
+           linesToClearIndices.forEach(y => this.flashLine(y));
+
+           // Shift blocks down - Iterate from bottom up
+           let rowsToDrop = 0;
+           for (let y = this.NY - 1; y >= 0; y--) {
+                if (linesToClearIndices.includes(y)) {
+                     rowsToDrop++; // Count how many rows need to drop at this point
+                } else if (rowsToDrop > 0) {
+                     // Shift this non-cleared row down by 'rowsToDrop'
+                     for (let x = 0; x < this.NX; x++) {
+                          if (this.blocks[x]) { // Check if column exists
+                              this.blocks[x][y + rowsToDrop] = this.blocks[x][y];
+                              this.blocks[x][y] = null; // Clear original position
+                          }
+                     }
+                }
+           }
 
 
           // Update score, rows, speed
           this.rows += clearedCount;
-           // Scoring: 1 line = 100, 2 lines = 300, 3 lines = 500, 4 lines = 800 (Tetris standard)
-          const points = [0, 100, 300, 500, 800];
-          this.score += points[clearedCount] || points[4]; // Use 800 for 4+ lines
+          const points = [0, 100, 300, 500, 800]; // Standard Tetris scoring
+          this.score += points[Math.min(clearedCount, 4)] * (this.rows / 10 + 1); // Add level bonus? Simplified here
+          this.score = Math.floor(this.score); // Ensure integer score
 
-          // Update speed based on total rows cleared
+
           this.step = Math.max(this.SPEED_MIN, this.SPEED_START - this.SPEED_DEC * this.rows);
-
           this.updateStats();
-           this.announce(`${clearedCount} line${clearedCount > 1 ? 's' : ''} cleared! Score ${this.score}. Rows ${this.rows}.`);
+          this.announce(`${clearedCount} line${clearedCount > 1 ? 's' : ''} cleared! Score ${this.score}. Rows ${this.rows}.`);
       }
       return clearedCount;
   }
 
   // --- Ghost Piece ---
   calculateGhostPiece() {
-      if (!this.currentPiece) return;
+      if (!this.currentPiece || this.state !== this.STATE.PLAY) {
+          this.ghostPieceY = -1; // Indicate no ghost piece
+          return;
+      };
+      // Start ghost check from current piece position
       this.ghostPieceY = this.currentPiece.y;
+      // Move ghost down until it hits something
       while (this.canPlace({ ...this.currentPiece, y: this.ghostPieceY + 1 })) {
           this.ghostPieceY++;
       }
   }
 
-  // --- Random Piece Generation (Bag Randomizer) ---
-
+  // --- Random Piece Generation (7-Bag Randomizer) ---
   randomPiece() {
-      if (!this.pieceBag || this.pieceBag.length === 0) {
-          // Refill the bag when empty
+      if (this.pieceBag.length === 0) {
+          // Refill the bag with all 7 tetromino types
           this.pieceBag = Object.keys(this.TETROMINOS).slice();
           // Shuffle the bag (Fisher-Yates shuffle)
           for (let i = this.pieceBag.length - 1; i > 0; i--) {
               const j = Math.floor(Math.random() * (i + 1));
               [this.pieceBag[i], this.pieceBag[j]] = [this.pieceBag[j], this.pieceBag[i]];
           }
+           // console.log("Generated new bag:", this.pieceBag); // For debugging
       }
-      // Pull next piece from the bag
+      // Pull the next piece from the shuffled bag
       const type = this.pieceBag.pop();
       return {
           type: type,
           dir: 0,
           x: Math.floor((this.NX - this.TETROMINOS[type].size) / 2),
-          y: 0 // Start at the top
+          y: (type === 'i') ? -1 : 0 // Start I piece slightly higher potentially
+          // Starting at y=0 is standard, -1 might feel better for I piece rotations
       };
   }
 
   // --- Drawing ---
-
   draw() {
-      if (!this.assetsLoaded || !this.blocks) return;
+      if (!this.blocks || !this.ctx) return; // Ensure context and blocks exist
 
       // Clear main canvas
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-      this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent background
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      // Optional: Draw background if needed (or rely on CSS background)
+      // this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+      // this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+      // Draw grid lines first (so blocks are on top)
+      this.drawGrid();
 
       // Draw placed blocks
       for (let x = 0; x < this.NX; x++) {
           for (let y = 0; y < this.NY; y++) {
-              const type = this.blocks[x][y];
-              if (type) {
-                  this.drawBlock(this.ctx, x, y, type);
+              if (this.blocks[x] && this.blocks[x][y]) {
+                  this.drawBlock(this.ctx, x, y, this.blocks[x][y]);
               }
           }
       }
 
-      // Draw ghost piece (if playing and piece exists)
-      if (this.state === this.STATE.PLAY && this.currentPiece && this.ghostPieceY > this.currentPiece.y) {
+      // Draw ghost piece (only during play and if different from current position)
+      if (this.state === this.STATE.PLAY && this.currentPiece && this.ghostPieceY >= 0 && this.ghostPieceY > this.currentPiece.y) {
            this.ctx.globalAlpha = this.GHOST_ALPHA;
            const ghostPiece = { ...this.currentPiece, y: this.ghostPieceY };
            this.eachBlock(ghostPiece, (x, y) => {
                this.drawBlock(this.ctx, x, y, ghostPiece.type);
            });
-           this.ctx.globalAlpha = 1.0;
+           this.ctx.globalAlpha = 1.0; // Reset alpha
       }
 
-      // Draw current piece
+      // Draw current piece (only during play)
       if (this.state === this.STATE.PLAY && this.currentPiece) {
            this.eachBlock(this.currentPiece, (x, y) => {
-               this.drawBlock(this.ctx, x, y, this.currentPiece.type);
+                // Only draw blocks that are within the visible board area (y >= 0)
+                if (y >= 0) {
+                   this.drawBlock(this.ctx, x, y, this.currentPiece.type);
+                }
            });
       }
-
-      // Draw grid lines (optional, can be toggled)
-      this.drawGrid();
   }
 
+
   drawBlock(context, x, y, type) {
-       if (!this.sprites[type]) {
-            // Fallback color if sprite missing
-            context.fillStyle = this.TETROMINOS[type]?.color || '#ffffff';
-            context.fillRect(x * this.blockSize, y * this.blockSize, this.blockSize, this.blockSize);
-            context.strokeStyle = 'rgba(0,0,0,0.5)';
-            context.strokeRect(x * this.blockSize, y * this.blockSize, this.blockSize, this.blockSize);
+       // Avoid drawing outside canvas bounds (especially relevant for preview)
+       if (x * this.blockSize >= context.canvas.width || y * this.blockSize >= context.canvas.height || x < 0 || y < 0) {
+           return;
+       }
+
+       const spriteKey = this.TETROMINOS[type]?.spriteKey;
+       const sprite = this.sprites[spriteKey];
+
+       if (sprite && this.assetsLoaded) { // Check if assets are loaded
+           context.drawImage(
+               sprite,
+               x * this.blockSize,
+               y * this.blockSize,
+               this.blockSize,
+               this.blockSize
+           );
        } else {
-            context.drawImage(
-                this.sprites[type],
-                x * this.blockSize,
-                y * this.blockSize,
-                this.blockSize,
-                this.blockSize
-            );
+           // Fallback drawing if sprites aren't loaded or missing
+           context.fillStyle = this.TETROMINOS[type]?.color || '#888'; // Grey fallback
+           context.fillRect(x * this.blockSize, y * this.blockSize, this.blockSize - 1, this.blockSize - 1); // Leave gap for grid
        }
   }
 
@@ -528,13 +626,13 @@ class Game {
       this.ctx.strokeStyle = 'var(--grid-line-color, #2a2a2a)';
       this.ctx.lineWidth = 1;
 
-      for (let i = 0; i <= this.NX; i++) {
+      for (let i = 0; i <= this.NX; i++) { // Vertical lines
           this.ctx.beginPath();
           this.ctx.moveTo(i * this.blockSize, 0);
           this.ctx.lineTo(i * this.blockSize, this.canvas.height);
           this.ctx.stroke();
       }
-      for (let i = 0; i <= this.NY; i++) {
+      for (let i = 0; i <= this.NY; i++) { // Horizontal lines
           this.ctx.beginPath();
           this.ctx.moveTo(0, i * this.blockSize);
           this.ctx.lineTo(this.canvas.width, i * this.blockSize);
@@ -543,80 +641,89 @@ class Game {
   }
 
   updateNextPieceDisplay() {
-      if (!this.nextPiece || !this.assetsLoaded) return;
+       if (!this.nextPiece || !this.uctx || !this.assetsLoaded) return; // Ensure context and assets ready
 
-      const previewSize = this.blockSize * this.NU; // Use main block size for consistency
-      this.upCanvas.width = previewSize;
-      this.upCanvas.height = previewSize;
+       const previewBlockSize = Math.floor(this.upCanvas.width / this.NU); // Calculate based on canvas size / desired block count
+       this.upCanvas.height = previewBlockSize * this.NU; // Maintain square aspect ratio potentially
 
-      this.uctx.clearRect(0, 0, this.upCanvas.width, this.upCanvas.height);
+       this.uctx.clearRect(0, 0, this.upCanvas.width, this.upCanvas.height);
 
-      const piece = this.nextPiece;
-      const tetromino = this.TETROMINOS[piece.type];
-      const blockSize = this.blockSize; // Use consistent block size
-      const scale = blockSize; // Direct mapping
+       const piece = this.nextPiece;
+       const tetromino = this.TETROMINOS[piece.type];
+       const scale = previewBlockSize; // Use the calculated preview block size
 
-      // Center the piece in the preview box
-      const pieceWidth = tetromino.size * scale;
-      const pieceHeight = tetromino.size * scale; // Assume square for simplicity here
-      const offsetX = (this.upCanvas.width - pieceWidth) / 2;
-      // Adjust Y offset based on piece type for better centering
-      let offsetY = (this.upCanvas.height - pieceHeight) / 2;
-      if (piece.type === 'i') offsetY -= scale / 2; // Adjust I piece slightly higher
-      if (piece.type === 'o') offsetY += scale / 2; // Adjust O piece slightly lower
+       // Center the piece
+       const pieceActualWidth = tetromino.size; // Width in blocks
+       const pieceActualHeight = tetromino.size; // Height in blocks (approximation)
 
-      // Use a temporary piece object for drawing, centered
-      const tempPiece = {
+       // Calculate offsets in terms of BLOCKS
+       const offsetXBlocks = (this.NU - pieceActualWidth) / 2;
+       let offsetYBlocks = (this.NU - pieceActualHeight) / 2;
+        // Fine-tune vertical centering
+       if (piece.type === 'i') offsetYBlocks -= 0.5; // Nudge I up slightly
+       if (piece.type === 'o') offsetYBlocks += 0.5; // Nudge O down slightly
+
+
+       // Temporarily store main blockSize, use preview size for drawing next piece
+       const mainBlockSize = this.blockSize;
+       this.blockSize = previewBlockSize;
+
+       // Use a temporary piece object positioned correctly for the preview canvas
+       const tempPiece = {
           ...piece,
-          // Calculate drawing position relative to canvas (0,0)
-          // Need to translate block coords (0-3) to canvas coords
-          x: offsetX / scale,
-          y: offsetY / scale
-      };
+          x: offsetXBlocks,
+          y: offsetYBlocks
+       };
 
-      this.eachBlock(tempPiece, (x, y) => {
-           // Adjust coordinates by the offset calculated
+       this.eachBlock(tempPiece, (x, y) => {
            this.drawBlock(this.uctx, x, y, piece.type);
-      });
+       });
+
+       // Restore main block size
+       this.blockSize = mainBlockSize;
   }
+
 
   flashLine(y) {
       const flashElement = document.createElement('div');
       flashElement.className = 'line-clear-flash';
+      // Position relative to the game area container
       flashElement.style.top = `${y * this.blockSize}px`;
+      flashElement.style.left = `0px`; // Align with canvas left
+      flashElement.style.width = `${this.canvas.width}px`; // Match canvas width
       flashElement.style.height = `${this.blockSize}px`;
-      // Set dynamic CSS variable for height if needed by animation
-      flashElement.style.setProperty('--block-size-dynamic', `${this.blockSize}px`);
 
-      this.canvas.parentNode.appendChild(flashElement); // Append relative to canvas
+      // Set dynamic CSS variable for height if needed by animation (already in CSS var)
+      // flashElement.style.setProperty('--block-size-dynamic', `${this.blockSize}px`);
 
-      // Remove the element after animation
+      // Append relative to the canvas's parent for correct positioning within game-area
+      this.canvas.parentNode.appendChild(flashElement);
+
+      // Remove the element after animation completes (match CSS duration)
       setTimeout(() => {
-          flashElement.remove();
-      }, 300); // Match animation duration
+           if (flashElement.parentNode) { // Check if still attached before removing
+              flashElement.remove();
+           }
+      }, 300);
   }
 
-
   // --- UI Updates & Stats ---
-
   updateStats() {
-      this.scoreEl.textContent = this.score;
-      this.rowsEl.textContent = this.rows;
+      if (this.scoreEl) this.scoreEl.textContent = this.score;
+      if (this.rowsEl) this.rowsEl.textContent = this.rows;
   }
 
   updateHighscoreDisplay() {
-      this.highEl.textContent = `Highscore: ${this.highscore}`;
+      if (this.highEl) this.highEl.textContent = `Highscore: ${this.highscore}`;
   }
 
   // --- State Transitions & Overlays ---
-
   togglePause() {
       if (this.state === this.STATE.PLAY) {
           this.state = this.STATE.PAUSE;
           this.stopLoop();
           this.showOverlay(this.pauseScreen);
           this.announce("Game paused");
-          // this.sounds.bgm?.pause();
       } else if (this.state === this.STATE.PAUSE) {
           this.resumeGame();
       }
@@ -628,21 +735,28 @@ class Game {
       this.hideOverlay(this.pauseScreen);
       this.lastTime = performance.now(); // Reset timer to avoid jump
       this.announce("Game resumed");
-      // this.sounds.bgm?.play();
-      this.loop();
+      if (!this.animationFrameId) { // Prevent multiple loops if resume is rapid
+          this.loop();
+      }
   }
 
   gameOver() {
+      if (this.state === this.STATE.OVER) return; // Prevent multiple triggers
       this.state = this.STATE.OVER;
       this.stopLoop();
       this.playSound('gameover');
-      this.finalScoreEl.textContent = this.score;
+      if (this.finalScoreEl) this.finalScoreEl.textContent = this.score;
 
       if (this.score > this.highscore) {
-          this.highscore = this.score;
-          localStorage.setItem(this.STORAGE_KEY, this.highscore);
-          this.updateHighscoreDisplay();
-           this.announce(`Game Over. New Highscore: ${this.highscore}`);
+           this.highscore = this.score;
+           try {
+               localStorage.setItem(this.STORAGE_KEY, this.highscore.toString());
+               this.updateHighscoreDisplay();
+               this.announce(`Game Over. New Highscore: ${this.highscore}`);
+           } catch (e) {
+                console.warn("Could not save highscore to localStorage:", e);
+                this.announce(`Game Over. Score: ${this.score}. Highscore could not be saved.`);
+           }
       } else {
           this.announce(`Game Over. Final Score: ${this.score}`);
       }
@@ -653,29 +767,34 @@ class Game {
   showMenu() {
       this.state = this.STATE.MENU;
       this.stopLoop();
-      this.resetGame(); // Reset board when going to menu
+      // Don't necessarily reset the board here, maybe only on startGame
+      // this.resetGame();
       this.hideAllOverlays(true); // Hide others instantly
       this.showOverlay(this.menuScreen);
       this.announce("Main Menu");
   }
 
   showOverlay(overlayElement, animate = true) {
-      overlayElement.classList.add('visible'); // Use class for visibility state
-      if (animate) {
-           gsap.to(overlayElement, { autoAlpha: 1, duration: 0.3, ease: "power1.out" });
-      } else {
+       if (!overlayElement) return;
+       overlayElement.classList.add('visible');
+       if (animate) {
+           gsap.to(overlayElement, { autoAlpha: 1, duration: 0.3, ease: "power1.out", overwrite: true });
+       } else {
            gsap.set(overlayElement, { autoAlpha: 1 });
-      }
-      // Make sure overlay is focusable
-      overlayElement.querySelector('button')?.focus();
+       }
+       // Focus the first interactive element in the overlay
+       const focusable = overlayElement.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+       focusable?.focus();
   }
 
   hideOverlay(overlayElement, animate = true) {
+       if (!overlayElement) return;
+       const onComplete = () => overlayElement.classList.remove('visible');
        if (animate) {
-          gsap.to(overlayElement, { autoAlpha: 0, duration: 0.3, ease: "power1.in", onComplete: () => overlayElement.classList.remove('visible') });
+           gsap.to(overlayElement, { autoAlpha: 0, duration: 0.2, ease: "power1.in", onComplete: onComplete, overwrite: true });
        } else {
-          gsap.set(overlayElement, { autoAlpha: 0 });
-          overlayElement.classList.remove('visible');
+           gsap.set(overlayElement, { autoAlpha: 0 });
+           onComplete();
        }
   }
 
@@ -684,18 +803,27 @@ class Game {
   }
 
   // --- Sound Control ---
-
   playSound(soundKey) {
-      if (!this.isMuted && this.sounds[soundKey]) {
-          this.sounds[soundKey].play();
+      if (!this.isMuted && this.sounds[soundKey] && typeof this.sounds[soundKey].play === 'function') {
+          // Check Howler state before playing - prevents errors if context is suspended
+           if (Howler.state === 'running') {
+               this.sounds[soundKey].play();
+           } else {
+               console.warn(`Sound ${soundKey} skipped: Howler state is ${Howler.state}`);
+               // Attempt to resume context on next interaction? (Handled in startGame)
+           }
       }
   }
 
   toggleMute() {
        this.isMuted = !this.isMuted;
-       Howler.mute(this.isMuted);
-       const muteIcon = this.btnMute.querySelector('.mute-icon');
-       const unmuteIcon = this.btnMute.querySelector('.unmute-icon');
+       Howler.mute(this.isMuted); // Global mute for all Howl instances
+
+       const muteIcon = this.btnMute?.querySelector('.mute-icon');
+       const unmuteIcon = this.btnMute?.querySelector('.unmute-icon');
+
+       if (!muteIcon || !unmuteIcon) return; // Guard if buttons not found
+
        if (this.isMuted) {
            muteIcon.style.display = 'none';
            unmuteIcon.style.display = 'inline';
@@ -710,138 +838,174 @@ class Game {
   }
 
   // --- Fullscreen ---
-
   toggleFullscreen() {
+      if (!document.fullscreenEnabled) {
+          console.warn("Fullscreen API is not enabled or supported.");
+          this.announce("Fullscreen not supported");
+          return;
+      }
+
       if (!document.fullscreenElement) {
           document.documentElement.requestFullscreen()
-              .catch(err => console.error(`Error attempting fullscreen: ${err.message} (${err.name})`));
-          this.announce("Entered fullscreen");
+              .then(() => this.announce("Entered fullscreen"))
+              .catch(err => {
+                  console.error(`Error attempting fullscreen: ${err.message} (${err.name})`);
+                  this.announce("Could not enter fullscreen");
+              });
       } else {
           if (document.exitFullscreen) {
-              document.exitFullscreen();
-               this.announce("Exited fullscreen");
+              document.exitFullscreen()
+                  .then(() => this.announce("Exited fullscreen"))
+                  .catch(err => console.error("Error exiting fullscreen:", err));
           }
       }
   }
 
   // --- Accessibility ---
   announce(message) {
-      this.srAnnouncer.textContent = message;
-      // Clear after a delay so repeated messages are read
-      setTimeout(() => { this.srAnnouncer.textContent = ''; }, 500);
+       if (this.srAnnouncer) {
+           this.srAnnouncer.textContent = message;
+           // Clear after a short delay so screen readers pick up changes
+           setTimeout(() => { if(this.srAnnouncer) this.srAnnouncer.textContent = ''; }, 750);
+       }
   }
 
-
   // --- Event Binding ---
-
   bindEvents() {
       // Window events
       window.addEventListener('resize', this.onResizeDebounced);
       document.addEventListener('keydown', this.handleKeyDown.bind(this));
 
-      // Button clicks
-      this.btnStart.addEventListener('click', this.startGame.bind(this));
-      this.btnResume.addEventListener('click', this.resumeGame.bind(this));
-      this.btnRestartPause.addEventListener('click', () => this.startGame()); // Restart from pause menu
-      this.btnPlayAgain.addEventListener('click', this.startGame.bind(this));
-      this.btnMenu.addEventListener('click', this.showMenu.bind(this));
-      this.btnMute.addEventListener('click', this.toggleMute.bind(this));
-      this.btnFS.addEventListener('click', this.toggleFullscreen.bind(this));
+      // Ensure buttons exist before adding listeners
+      this.btnStart?.addEventListener('click', () => this.startGame());
+      this.btnResume?.addEventListener('click', () => this.resumeGame());
+      this.btnRestartPause?.addEventListener('click', () => this.startGame());
+      this.btnPlayAgain?.addEventListener('click', () => this.startGame());
+      this.btnMenu?.addEventListener('click', () => this.showMenu());
+      this.btnMute?.addEventListener('click', () => this.toggleMute());
+      this.btnFS?.addEventListener('click', () => this.toggleFullscreen());
 
-      // Touch controls (using direct button clicks)
-      this.touchControls.addEventListener('click', (e) => {
-           // Use pointerdown for faster response on touch devices
-           const button = e.target.closest('button');
-           if (button && button.dataset.action) {
+      // Touch controls (using pointerdown for better responsiveness)
+      this.touchControls?.addEventListener('pointerdown', (e) => {
+          const button = e.target.closest('button');
+          if (button && button.dataset.action && this.state === this.STATE.PLAY) {
                this.queueAction(button.dataset.action);
-               e.preventDefault(); // Prevent double actions (like zoom)
-           }
+               e.preventDefault(); // Prevent default touch actions like scrolling/zooming
+          }
       });
 
-      // Prevent context menu on touch controls
-       this.touchControls.addEventListener('contextmenu', e => e.preventDefault());
+      // Prevent context menu on touch controls (optional)
+      this.touchControls?.addEventListener('contextmenu', e => e.preventDefault());
+
+       // Handle visibility change to pause game
+       document.addEventListener('visibilitychange', () => {
+           if (document.hidden && this.state === this.STATE.PLAY) {
+               this.togglePause();
+               this.announce("Game paused due to window losing focus");
+           }
+       });
   }
 
   handleKeyDown(e) {
-      // Allow default browser shortcuts unless we handle the key
+      // Ignore keydowns if focused on an input/textarea, unless it's ESC
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+           if (e.key === this.KEY.ESC && this.state === this.STATE.PLAY) {
+               this.togglePause();
+               e.preventDefault();
+           }
+          return;
+      }
+
       let handled = false;
 
       if (this.state === this.STATE.PLAY) {
           switch (e.key) {
-              case this.KEY.LEFT: this.queueAction('left'); handled = true; break;
-              case this.KEY.RIGHT: this.queueAction('right'); handled = true; break;
-              case this.KEY.DOWN: this.queueAction('down'); handled = true; break;
-              case this.KEY.UP: this.queueAction('rotate'); handled = true; break;
-              case this.KEY.SPACE: this.queueAction('drop'); handled = true; break;
-              case this.KEY.ESC: this.togglePause(); handled = true; break;
+              case this.KEY.LEFT:   this.queueAction('left'); handled = true; break;
+              case this.KEY.RIGHT:  this.queueAction('right'); handled = true; break;
+              case this.KEY.DOWN:   this.queueAction('down'); handled = true; break;
+              case this.KEY.UP:     this.queueAction('rotate'); handled = true; break;
+              case this.KEY.SPACE:  this.queueAction('drop'); handled = true; break;
+              case this.KEY.ESC:    this.togglePause(); handled = true; break;
+               // Add other potential keys like 'p' for pause?
+               case 'p': case 'P':  this.togglePause(); handled = true; break;
           }
       } else if (this.state === this.STATE.PAUSE) {
-           if (e.key === this.KEY.ESC) {
+           if (e.key === this.KEY.ESC || e.key === 'p' || e.key === 'P') {
                this.resumeGame();
                handled = true;
            }
-      } else if (this.state === this.STATE.MENU) {
-          // Allow starting with Enter/Space if Start button focused?
-          // The button handler already covers Enter/Space when focused.
-      } else if (this.state === this.STATE.OVER) {
-          // Allow restarting with Enter/Space if button focused?
       }
+      // No specific key actions needed for MENU or OVER states here,
+      // as button focus handles Enter/Space.
 
-      // Prevent default browser action ONLY if we handled the key
       if (handled) {
-          e.preventDefault();
+          e.preventDefault(); // Prevent default browser action (scrolling, etc.)
       }
   }
 
   // --- Resize Handling ---
-
   onResize() {
+       if (!this.canvas || !this.ctx) return; // Ensure canvas is ready
+
        const container = document.getElementById('game-container');
-       const containerWidth = container.clientWidth;
-       const containerHeight = container.clientHeight - 50; // Approx space for header/padding
+       if (!container) return;
 
-       // Determine available space based on layout (media queries control layout)
-       const isMobileLayout = window.innerWidth <= 768;
-       let availableWidth = containerWidth;
-       let availableHeight = containerHeight;
+       // Use visual viewport for more accurate dimensions on mobile with toolbars
+       const vpWidth = window.visualViewport ? window.visualViewport.width : window.innerWidth;
+       const vpHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
 
-       if (!isMobileLayout) {
-           // Desktop layout: reserve space for sidebar
-           availableWidth -= 170; // Approx sidebar width + gap
-       } else if (window.matchMedia("(orientation: landscape)").matches) {
-           // Mobile landscape: reserve space for vertical controls
-           availableWidth -= 80; // Approx controls width + gap
-       } else {
-           // Mobile portrait: reserve space for bottom controls
-            availableHeight -= 90; // Approx controls height + gap
+       // Estimate available height considering header
+       const availableHeight = vpHeight - (this.header?.offsetHeight || 48) - 30; // Subtract header height + padding
+       let availableWidth = vpWidth - 40; // Subtract some horizontal padding
+
+
+       // Adjust available space based on layout (CSS media queries determine layout)
+       const sidebarVisible = window.getComputedStyle(this.sidebar)?.display !== 'none';
+       const touchControlsVisible = window.getComputedStyle(this.touchControls)?.display !== 'none';
+
+
+       if (sidebarVisible) {
+           availableWidth -= (this.sidebar?.offsetWidth || 150) + 32; // Sidebar width + gap
        }
 
+       if (touchControlsVisible) {
+            // Heuristic: Reduce available height more in portrait, width more in landscape
+           if (vpWidth < vpHeight) { // Portrait-ish
+                availableHeight -= (this.touchControls?.offsetHeight || 80) + 16; // Controls height + gap
+           } else { // Landscape-ish
+                availableWidth -= (this.touchControls?.offsetWidth || 65) + 16; // Controls width + gap
+           }
+       }
 
-       // Calculate block size based on limiting dimension (width or height)
+       // Calculate block size based on limiting dimension
        const blockW = Math.floor(availableWidth / this.NX);
        const blockH = Math.floor(availableHeight / this.NY);
-       this.blockSize = Math.max(1, Math.min(blockW, blockH)); // Ensure at least 1px
+       this.blockSize = Math.max(5, Math.min(blockW, blockH)); // Ensure minimum size, use smallest fit
 
-       // Set canvas dimensions
+       // Apply dimensions to canvas
        this.canvas.width = this.blockSize * this.NX;
        this.canvas.height = this.blockSize * this.NY;
 
-       // Update preview canvas based on new block size
+       // Update preview canvas (needs recalculation based on main block size or fixed size)
        this.updateNextPieceDisplay();
 
-       // Force redraw if game is running or paused
-       if (this.state === this.STATE.PLAY || this.state === this.STATE.PAUSE) {
-           this.draw();
-       }
+       // Redraw immediately
+       this.draw();
   }
 }
 
 // --- Global Initialization ---
-// Use 'DOMContentLoaded' to ensure the DOM is ready before creating the game instance
-document.addEventListener('DOMContentLoaded', () => {
-  // Disable start button until assets are loaded (re-enabled in loadAssets callback)
-  const startButton = document.getElementById('btn-start');
-  if(startButton) startButton.disabled = true;
+// Defer game creation until DOM is fully loaded
+function initializeGame() {
+  // Check if already initialized to prevent duplicates if script runs multiple times
+  if (!window.tetrisGame) {
+      window.tetrisGame = new Game();
+      console.log("Chromatris Initialized");
+  }
+}
 
-  window.tetrisGame = new Game(); // Make it global for easy debugging if needed
-});
+if (document.readyState === 'loading') { // Loading hasn't finished yet
+  document.addEventListener('DOMContentLoaded', initializeGame);
+} else { // `DOMContentLoaded` has already fired
+  initializeGame();
+}
