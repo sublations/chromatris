@@ -1,4 +1,3 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,18 +5,22 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Chromatris</title>
   <link rel="icon" href="assets/logo.png" type="image/png">
+
   <!-- Open Graph / Twitter -->
   <meta property="og:title" content="Chromatris">
   <meta property="og:description" content="Tetris, but with chromaguys">
   <meta property="og:image" content="https://sublations.github.io/chromatris/assets/background.jpg">
   <meta name="twitter:card" content="summary_large_image">
+
   <link rel="stylesheet" href="styles.css">
 
-  <!-- Libraries -->
+  <!-- Libraries (deferred so DOM is parsed first) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js" defer></script>
-  <script type="module" src="game.js" defer></script>
+
+  <!-- Your game logic -->
+  <script src="game.js" defer></script>
 </head>
 <body>
   <header id="header">
