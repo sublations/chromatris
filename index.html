@@ -2,69 +2,80 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Chromatris</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Chromatris - Modern Tetris Clone</title>
+  <meta name="description" content="A modern, responsive Tetris clone built with HTML, CSS, and JavaScript. Features touch controls, high scores, and smooth gameplay.">
+  <meta name="keywords" content="tetris, puzzle game, javascript game, html5 game, chromatris">
+  <meta name="theme-color" content="#111111">
+
   <link rel="icon" href="assets/logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/logo-192.png"> <link rel="manifest" href="manifest.json">
 
-  <!-- Open Graph / Twitter -->
-  <meta property="og:title" content="Chromatris">
-  <meta property="og:description" content="Tetris, but with chromaguys">
-  <meta property="og:image" content="https://sublations.github.io/chromatris/assets/background.jpg">
-  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://your-game-url.com/"> <meta property="og:title" content="Chromatris - Modern Tetris Clone">
+  <meta property="og:description" content="A fun and colorful Tetris clone.">
+  <meta property="og:image" content="https://your-game-url.com/assets/background.jpg"> <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:url" content="https://your-game-url.com/"> <meta property="twitter:title" content="Chromatris - Modern Tetris Clone">
+  <meta property="twitter:description" content="A fun and colorful Tetris clone.">
+  <meta property="twitter:image" content="https://your-game-url.com/assets/background.jpg"> <link rel="stylesheet" href="styles.css">
 
-  <link rel="stylesheet" href="styles.css">
-
-  <!-- Libraries (deferred so DOM is parsed first) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js" defer></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js" defer></script>
-
-  <!-- Your game logic -->
-  <script src="game.js" defer></script>
-</head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.4/howler.min.js" integrity="sha512-xi/RZRIF/S0hJ+yJJYuZ5yk6/8pCiRlEXZzoguSMl+vk2i3m6UjUO/WcZ11blRL/O+rnj94JAU/Qzhh96rg0gw==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="game.js" type="module" defer></script> </head>
 <body>
   <header id="header">
     <div class="left">
-      <span id="highscore">Highscore: 0</span>
+      <span id="highscore" aria-live="polite">Highscore: 0</span>
     </div>
     <div class="right">
-      <button id="btn-mute" aria-label="Mute/Unmute">🔊</button>
+      <button id="btn-mute" aria-label="Mute/Unmute Sound" aria-pressed="false">
+        <span class="mute-icon">🔊</span><span class="unmute-icon" style="display: none;">🔇</span>
+      </button>
       <button id="btn-fullscreen" aria-label="Toggle Fullscreen">⛶</button>
     </div>
   </header>
 
   <div id="game-container">
-    <canvas id="game-canvas" aria-label="Chromatris game area"></canvas>
+    <main id="game-area">
+        <canvas id="game-canvas" width="300" height="600" aria-label="Chromatris game board"></canvas>
+    </main>
+
     <aside id="sidebar">
       <div id="next-piece">
-        <canvas id="upcoming-canvas" aria-label="Next piece preview"></canvas>
+        <span class="label" id="next-label">NEXT</span>
+        <canvas id="upcoming-canvas" width="120" height="120" aria-labelledby="next-label"></canvas>
       </div>
-      <div class="stat"><label>Score</label><span id="score">0</span></div>
-      <div class="stat"><label>Rows</label><span id="rows">0</span></div>
+      <div class="stat"><label id="score-label">Score</label><span id="score" aria-labelledby="score-label" aria-live="polite">0</span></div>
+      <div class="stat"><label id="rows-label">Rows</label><span id="rows" aria-labelledby="rows-label" aria-live="polite">0</span></div>
     </aside>
 
-    <div id="touch-controls">
-      <button data-action="left">◀</button>
-      <button data-action="rotate">⟳</button>
-      <button data-action="right">▶</button>
-      <button data-action="down">▼</button>
-    </div>
+    <nav id="touch-controls" aria-label="Game Controls">
+      <button data-action="left" aria-label="Move Left">◀</button>
+      <button data-action="rotate" aria-label="Rotate">⟳</button>
+      <button data-action="down" aria-label="Move Down">▼</button>
+      <button data-action="right" aria-label="Move Right">▶</button>
+      <button data-action="drop" aria-label="Hard Drop" class="drop-btn">DROP</button>
+    </nav>
 
-    <div class="overlay" id="menu-screen">
-      <h1>Chromatris</h1>
+    <div class="overlay" id="menu-screen" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+      <h1 id="menu-title">Chromatris</h1>
       <button id="btn-start">Start Game</button>
     </div>
-    <div class="overlay hidden" id="pause-screen">
-      <h1>Paused</h1>
+    <div class="overlay hidden" id="pause-screen" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+      <h1 id="pause-title">Paused</h1>
       <button id="btn-resume">Resume</button>
-      <button id="btn-restart">Restart</button>
+      <button id="btn-restart-pause">Restart</button>
+      <p><small>(Press ESC to Resume)</small></p>
     </div>
-    <div class="overlay hidden" id="gameover-screen">
-      <h1>Game Over</h1>
+    <div class="overlay hidden" id="gameover-screen" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+      <h1 id="gameover-title">Game Over</h1>
       <p>Your Score: <span id="final-score">0</span></p>
       <button id="btn-play-again">Play Again</button>
       <button id="btn-menu">Main Menu</button>
     </div>
   </div>
+
+  <div id="sr-announcer" class="visually-hidden" aria-live="assertive" aria-atomic="true"></div>
+
 </body>
 </html>

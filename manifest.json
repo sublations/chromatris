@@ -1,0 +1,21 @@
+{
+    "name": "Chromatris",
+    "short_name": "Chromatris",
+    "description": "A modern, responsive Tetris clone.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#111111",
+    "theme_color": "#111111",
+    "icons": [
+      {
+        "src": "assets/logo.png",
+        "sizes": "192x192",
+        "type": "image/png"
+      },
+      {
+        "src": "assets/logo.png", 
+        "sizes": "512x512",
+        "type": "image/png"
+      }
+    ]
+  }

@@ -1,104 +1,389 @@
 :root {
-  --bg-main: #111;
-  --panel-bg: rgba(0, 0, 0, 0.8);
-  --text-light: #eee;
-  --accent: #0ff;
-  --btn-bg: #222;
-  --btn-hover: #333;
-  --header-bg: rgba(0,0,0,0.6);
-  --font-family: 'Segoe UI', sans-serif;
+  --bg-main: #1a1a1a;
+  --panel-bg: rgba(10, 10, 10, 0.85);
+  --border-color: #333;
+  --grid-line-color: #2a2a2a;
+  --text-light: #f0f0f0;
+  --text-dark: #222;
+  --accent: #00ddff;
+  --accent-dark: #00aacc;
+  --btn-bg: #333;
+  --btn-hover: #444;
+  --btn-active: #555;
+  --header-bg: rgba(0, 0, 0, 0.7);
+  --overlay-bg: rgba(0, 0, 0, 0.9);
+  --ghost-opacity: 0.3;
+  --clear-flash-color: rgba(255, 255, 255, 0.8);
+  --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  --block-size: min(max(20px, 4vmin), 35px); /* Responsive block size base */
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent; /* Disable tap highlight */
+}
 
 html, body {
-  width: 100%; height: 100%; overflow: hidden;
-  background: url('assets/background.jpg') center/cover no-repeat fixed;
+  width: 100%;
+  height: 100%;
+  overflow: hidden; /* Prevent scrollbars */
+  background: var(--bg-main) url('assets/background.jpg') center/cover no-repeat fixed;
   font-family: var(--font-family);
   color: var(--text-light);
+  font-size: 16px;
+}
+
+/* Basic Accessibility */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Focus Indicator for Keyboard Navigation */
+button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--bg-main);
 }
 
 #header {
-  position: absolute; top: 0; left: 0; right: 0;
-  height: 3rem; background: var(--header-bg);
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 1rem; z-index: 10;
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3rem;
+  background: var(--header-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  z-index: 10;
+  backdrop-filter: blur(5px);
 }
 #header .left, #header .right {
-  display: flex; align-items: center; gap: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 #header span, #header button {
-  font-size: 1rem; color: var(--text-light);
-  background: none; border: none; cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-light);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 }
-#header button:hover { opacity: 0.7; }
+#header button:hover {
+  opacity: 0.8;
+}
+#header button:active {
+  opacity: 0.6;
+}
+#highscore {
+  font-weight: bold;
+}
 
 #game-container {
-  position: absolute; top: 3rem; bottom: 0; left: 0; right: 0;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute;
+  top: 3rem; /* Below header */
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: flex-start; /* Align top */
+  justify-content: center;
+  padding-top: 2vh; /* Space from header */
+  gap: 2rem; /* Space between board and sidebar */
+}
+
+#game-area {
+    display: flex; /* Allow canvas to center if needed */
+    justify-content: center;
 }
 
 canvas {
   background: var(--panel-bg);
-  box-shadow: 0 0 20px #000;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.5);
+  /* Crisper pixels for blocky look */
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
   image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block; /* Prevent extra space below */
 }
 
 #sidebar {
-  margin-left: 1rem;
-  display: flex; flex-direction: column; align-items: center;
+  padding-top: 1rem;
+  width: 150px; /* Fixed width for sidebar */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
 }
 
 #sidebar .stat {
-  margin: 0.5rem 0;
-  width: 100px;
-  display: flex; flex-direction: column; align-items: center;
-}
-#sidebar .stat label { font-size: 0.9rem; }
-#sidebar .stat span { font-size: 1.5rem; color: var(--accent); }
-
-#next-piece canvas {
-  width: 100px; height: 100px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   background: var(--panel-bg);
-  margin-bottom: 1rem;
+  padding: 0.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
 }
+#sidebar .stat label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-bottom: 0.2rem;
+}
+#sidebar .stat span {
+  font-size: 1.8rem;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+#next-piece {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    background: var(--panel-bg);
+    padding: 0.5rem;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+#next-piece .label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-bottom: 0.3rem;
+}
+#next-piece canvas {
+  width: 100px; /* Fixed size */
+  height: 100px;
+  background: none; /* Inherit from parent */
+  border: none;
+  box-shadow: none;
+}
+
+/* Line Clearing Flash Animation */
+.line-clear-flash {
+  position: absolute;
+  background-color: var(--clear-flash-color);
+  width: 100%;
+  height: var(--block-size-dynamic); /* Will be set by JS */
+  left: 0;
+  z-index: 1; /* Above blocks */
+  animation: flash 0.3s ease-out forwards;
+  pointer-events: none; /* Don't interfere with input */
+}
+
+@keyframes flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 
 /* Touch controls */
 #touch-controls {
-  position: absolute; bottom: 1rem; left: 50%;
-  transform: translateX(-50%); display: none; gap: 0.5rem;
+  position: absolute;
+  bottom: 1rem;
+  left: 0;
+  right: 0;
+  display: none; /* Hidden by default */
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  z-index: 5;
+  flex-wrap: wrap; /* Allow wrapping on narrow screens */
 }
 #touch-controls button {
   background: var(--btn-bg);
-  border: none; padding: 1rem; font-size: 1.2rem;
-  border-radius: 4px; color: var(--text-light);
+  border: 1px solid var(--border-color);
+  padding: 0.8rem;
+  font-size: 1.5rem; /* Larger icons */
+  line-height: 1;
+  border-radius: 8px;
+  color: var(--text-light);
+  min-width: 55px;
+  min-height: 55px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  user-select: none; /* Prevent text selection on hold */
+  transition: background-color 0.1s ease;
 }
-#touch-controls button:hover { background: var(--btn-hover); }
+#touch-controls button.drop-btn {
+    font-size: 1rem;
+    padding: 0.8rem 1rem;
+    font-weight: bold;
+}
+#touch-controls button:hover { /* Less relevant on touch, but good for hybrid */
+  background: var(--btn-hover);
+}
+#touch-controls button:active {
+  background: var(--btn-active);
+  transform: scale(0.95);
+}
 
 /* Overlays */
 .overlay {
-  position: absolute; inset: 0;
-  background: rgba(0,0,0,0.85);
-  display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 1rem; z-index: 5;
+  position: absolute;
+  inset: 0; /* Covers entire game container */
+  background: var(--overlay-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  z-index: 20; /* Above game, below header potentially */
+  text-align: center;
+  padding: 1rem;
+  opacity: 0; /* Start hidden for GSAP */
+  visibility: hidden; /* Start hidden for GSAP */
 }
-.overlay.hidden { display: none; }
-.overlay h1 { font-size: 3rem; letter-spacing: 2px; }
+.overlay.visible { /* Class added by JS when shown */
+  opacity: 1;
+  visibility: visible;
+}
+/* Overlays - no longer using .hidden class, rely on GSAP autoAlpha */
+
+.overlay h1 {
+  font-size: clamp(2rem, 8vw, 3.5rem); /* Responsive font size */
+  letter-spacing: 1px;
+  color: var(--accent);
+  margin-bottom: 1rem;
+}
+.overlay p {
+  font-size: 1.2rem;
+}
+.overlay span {
+  font-weight: bold;
+  color: var(--accent);
+}
 .overlay button {
   background: var(--btn-bg);
   color: var(--text-light);
-  border: none; padding: 0.8rem 1.5rem;
-  font-size: 1.2rem; cursor: pointer;
+  border: 1px solid var(--border-color);
+  padding: 0.8rem 1.8rem;
+  font-size: 1.1rem;
+  cursor: pointer;
   border-radius: 5px;
+  min-width: 150px;
+  transition: background-color 0.2s ease, transform 0.1s ease;
 }
-.overlay button:hover { background: var(--btn-hover); }
+.overlay button:hover {
+  background: var(--btn-hover);
+}
+.overlay button:active {
+  background: var(--btn-active);
+  transform: scale(0.98);
+}
+.overlay small {
+    opacity: 0.7;
+    font-size: 0.9rem;
+}
 
 /* Responsiveness */
-@media (max-width: 800px) {
-  #game-canvas { width: 80vw; height: 80vh; }
-  #sidebar { display: none; }
-  #touch-controls { display: flex; }
+
+/* Medium screens and up (tablets, desktops) - Show sidebar */
+@media (min-width: 769px) {
+  #game-container {
+    padding-top: 5vh;
+  }
+  #sidebar {
+    display: flex;
+  }
+  #touch-controls {
+    display: none;
+  }
 }
-@media (min-width: 801px) {
-  #game-canvas { width: 600px; height: 800px; }
+
+/* Small screens (phones) - Hide sidebar, show touch controls */
+@media (max-width: 768px) {
+  #game-container {
+    flex-direction: column;
+    align-items: center;
+    padding-top: 2vh;
+    gap: 1rem; /* Reduce gap */
+  }
+  #sidebar {
+    display: none; /* Hide sidebar */
+  }
+  #touch-controls {
+    display: flex; /* Show touch controls */
+    position: relative; /* Position within flow below canvas */
+    bottom: auto; left: auto; right: auto;
+    transform: none;
+    margin-top: 1rem; /* Space below canvas */
+  }
+  /* Adjust canvas size dynamically based on available space */
+  #game-canvas {
+     width: 90vw; /* Example: take 90% of viewport width */
+     height: calc(90vw * 2); /* Maintain 1:2 aspect ratio */
+     max-height: 75vh; /* Don't let it get too tall */
+     max-width: calc(75vh / 2); /* Maintain aspect ratio if height is constrained */
+  }
+
+   /* Ensure touch controls don't make page scroll */
+  body {
+    padding-bottom: 80px; /* Add padding to prevent overlap with controls */
+  }
+}
+
+/* Landscape on small devices */
+@media (max-width: 768px) and (orientation: landscape) {
+   #game-container {
+    flex-direction: row; /* Side-by-side again */
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1rem;
+   }
+   #game-canvas {
+       height: 80vh; /* Take most of the height */
+       width: calc(80vh / 2); /* Maintain 1:2 aspect ratio */
+       max-width: 70vw; /* Don't get too wide */
+       max-height: calc(70vw * 2); /* Maintain aspect ratio if width constrained */
+   }
+   #touch-controls {
+        position: absolute; /* Position absolutely again */
+        right: 1rem;
+        bottom: 1rem;
+        left: auto;
+        flex-direction: column; /* Stack controls vertically */
+        width: 65px; /* Fixed width for vertical stack */
+        gap: 0.3rem;
+        transform: none;
+        margin-top: 0;
+   }
+   #touch-controls button {
+       width: 100%; /* Full width of the container */
+       padding: 0.5rem;
+       font-size: 1.2rem;
+       min-height: 45px;
+       min-width: unset;
+   }
+    #touch-controls button.drop-btn {
+       font-size: 0.8rem;
+   }
+
+   body { padding-bottom: 0; } /* No extra padding needed */
+}
+
+/* Reduce motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .line-clear-flash {
+    animation: none;
+    opacity: 0; /* Just hide it */
+  }
+  /* Disable GSAP animations if needed */
+  /* gsap.globalTimeline.timeScale(0); */ /* Can be set in JS */
 }
